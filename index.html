@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Color Game · Sam Barbeau</title>
+  <meta name="description" content="Pick the odd color out. Get faster. It gets harder." />
+  <style>
+    :root {
+      --bg: #e7e5e4;
+      --ink: #082f49;
+      --accent: #0369a1;
+      --muted: #57534e;
+      --line: #d6d3d1;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+      font-family: ui-serif, Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.5; user-select: none;
+      -webkit-tap-highlight-color: transparent; }
+    a { color: var(--accent); text-decoration: none; }
+
+    .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 2rem; }
+    header.site { display: flex; align-items: center; justify-content: space-between;
+      padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); margin-bottom: 1.5rem; }
+    .brand { color: var(--ink); font-weight: 600; }
+    nav.site a { margin-left: 1.25rem; font-size: 0.95rem; color: var(--muted); }
+    nav.site a:hover, nav.site a.active { color: var(--ink); }
+
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 .35rem; }
+    .lede { color: var(--muted); margin: 0 0 1.25rem; font-size: 0.95rem; }
+
+    .hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem;
+      margin-bottom: 1rem; }
+    .stat { text-align: center; padding: .5rem .25rem; border: 1px solid var(--line);
+      background: #f5f4f1; border-radius: 4px; }
+    .stat .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    .stat .val { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    .timer-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-bottom: 1rem; }
+    .timer-bar .fill { height: 100%; background: var(--ink); width: 100%; transition: width 100ms linear, background 200ms ease; }
+    .timer-bar .fill.warn { background: #b91c1c; }
+
+    .board {
+      display: grid;
+      gap: 6px;
+      aspect-ratio: 1 / 1;
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .tile {
+      border-radius: 4px;
+      cursor: pointer;
+      transition: transform 80ms ease;
+      border: none;
+      padding: 0;
+    }
+    .tile:hover { transform: scale(1.02); }
+    .tile:active { transform: scale(0.98); }
+    .tile.flash-good { animation: flashGood 350ms ease; }
+    .tile.flash-bad  { animation: flashBad 500ms ease; }
+
+    @keyframes flashGood {
+      0% { box-shadow: 0 0 0 0 rgba(8, 47, 73, 0.0); }
+      30% { box-shadow: 0 0 0 6px rgba(8, 47, 73, 0.5); }
+      100% { box-shadow: 0 0 0 0 rgba(8, 47, 73, 0.0); }
+    }
+    @keyframes flashBad {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-8px); }
+      40%, 80% { transform: translateX(8px); }
+    }
+
+    .panel { text-align: center; margin: 1.5rem 0; }
+    .panel h2 { font-size: 1.5rem; margin: 0 0 .5rem; }
+    .panel p { color: var(--muted); margin: 0 0 1rem; }
+    button.primary {
+      background: var(--ink); color: var(--bg); border: none;
+      padding: 0.7rem 1.5rem; font: inherit; font-size: 1rem;
+      border-radius: 4px; cursor: pointer; letter-spacing: 0.02em;
+    }
+    button.primary:hover { background: #0c4a6e; }
+    button.ghost {
+      background: transparent; color: var(--muted); border: 1px solid var(--line);
+      padding: 0.45rem 1rem; font: inherit; font-size: 0.88rem;
+      border-radius: 4px; cursor: pointer; margin-left: 0.5rem;
+    }
+    button.ghost:hover { color: var(--ink); border-color: var(--muted); }
+
+    .reveal { font-family: ui-monospace, monospace; font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; }
+    .reveal .swatch { display: inline-block; width: 0.9rem; height: 0.9rem; vertical-align: middle;
+      border: 1px solid rgba(0,0,0,0.15); border-radius: 2px; margin: 0 .35rem; }
+
+    footer.site { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+      font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="site">
+      <a href="https://sambarbeau.com" class="brand">Sam Barbeau</a>
+      <nav class="site">
+        <a href="https://sambarbeau.com">about</a>
+        <a href="https://sambarbeau.com/projects.html" class="active">projects</a>
+        <a href="https://sambarbeau.com/travel.html">travel</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>color game</h1>
+      <p class="lede">find the odd color out before the timer runs out. it gets harder.</p>
+
+      <div class="hud">
+        <div class="stat"><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+        <div class="stat"><div class="lbl">Level</div><div class="val" id="level">1</div></div>
+        <div class="stat"><div class="lbl">Grid</div><div class="val" id="grid-info">2×2</div></div>
+        <div class="stat"><div class="lbl">Best</div><div class="val" id="best">0</div></div>
+      </div>
+
+      <div class="timer-bar"><div class="fill" id="timer-fill"></div></div>
+
+      <div class="board" id="board"></div>
+
+      <div class="panel" id="panel">
+        <h2 id="panel-title">ready?</h2>
+        <p id="panel-msg">click a square fast. each correct pick speeds things up and shrinks the color difference.</p>
+        <button class="primary" id="start-btn">Start</button>
+        <button class="ghost" id="reset-best-btn" title="Clear high score">reset best</button>
+        <div class="reveal" id="reveal" style="display:none"></div>
+      </div>
+    </main>
+
+    <footer class="site">&copy; sam barbeau · <a href="https://github.com/SamBarbeau/color-game">source</a></footer>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const board = $('board');
+    const STORAGE_KEY = 'sb-color-game-best';
+
+    const State = { idle: 'idle', playing: 'playing', over: 'over' };
+    let state = State.idle;
+    let score = 0;
+    let level = 1;
+    let gridSize = 2;       // 2,3,4,5,6 — n×n
+    let colorDiff = 60;     // initial RGB delta on the largest channel
+    let timeLimit = 5.0;    // seconds per round
+    let timeLeft  = timeLimit;
+    let best = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+    let oddIdx = -1;
+    let baseColor = null;
+    let oddColor = null;
+    let lastTick = 0;
+    let rafId = null;
+
+    $('best').textContent = best;
+
+    function difficultyFor(score) {
+      // Smoothly ramp: bigger grid + smaller color diff + tighter clock
+      const grid = Math.min(6, 2 + Math.floor(score / 4));
+      const diff = Math.max(6, Math.round(60 - score * 1.6));   // 60 → 6
+      const time = Math.max(2.0, 5.0 - score * 0.12);           // 5s → 2s
+      const lvl  = Math.floor(score / 4) + 1;
+      return { grid, diff, time, lvl };
+    }
+
+    function randColor() {
+      // Pick a saturated-ish color so the differences are perceivable
+      const r = 50 + Math.floor(Math.random() * 180);
+      const g = 50 + Math.floor(Math.random() * 180);
+      const b = 50 + Math.floor(Math.random() * 180);
+      return [r, g, b];
+    }
+    function shiftColor([r,g,b], delta) {
+      // Shift the largest channel by ±delta (clamped)
+      const arr = [r,g,b];
+      const idx = arr.indexOf(Math.max(...arr));
+      const dir = arr[idx] + delta > 255 ? -1 : 1;
+      arr[idx] = Math.max(0, Math.min(255, arr[idx] + dir * delta));
+      return arr;
+    }
+    const rgb = ([r,g,b]) => `rgb(${r}, ${g}, ${b})`;
+
+    function paintBoard() {
+      board.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+      board.innerHTML = '';
+      const total = gridSize * gridSize;
+      oddIdx = Math.floor(Math.random() * total);
+      baseColor = randColor();
+      oddColor = shiftColor(baseColor, colorDiff);
+      for (let i = 0; i < total; i++) {
+        const tile = document.createElement('button');
+        tile.className = 'tile';
+        tile.style.background = rgb(i === oddIdx ? oddColor : baseColor);
+        tile.dataset.idx = i;
+        tile.addEventListener('click', () => onTileClick(i, tile));
+        board.appendChild(tile);
+      }
+    }
+
+    function applyDifficulty() {
+      const d = difficultyFor(score);
+      gridSize = d.grid;
+      colorDiff = d.diff;
+      timeLimit = d.time;
+      level = d.lvl;
+      $('level').textContent = level;
+      $('grid-info').textContent = `${gridSize}×${gridSize}`;
+    }
+
+    function startRound() {
+      applyDifficulty();
+      paintBoard();
+      timeLeft = timeLimit;
+      lastTick = performance.now();
+      $('timer-fill').classList.remove('warn');
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function tick(now) {
+      const dt = (now - lastTick) / 1000;
+      lastTick = now;
+      timeLeft -= dt;
+      const pct = Math.max(0, timeLeft / timeLimit);
+      $('timer-fill').style.width = (pct * 100) + '%';
+      if (pct < 0.25) $('timer-fill').classList.add('warn');
+      if (timeLeft <= 0) { gameOver('time'); return; }
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function onTileClick(i, tile) {
+      if (state !== State.playing) return;
+      if (i === oddIdx) {
+        tile.classList.add('flash-good');
+        score++;
+        $('score').textContent = score;
+        if (score > best) {
+          best = score;
+          localStorage.setItem(STORAGE_KEY, String(best));
+          $('best').textContent = best;
+        }
+        // Quick 120ms beat then next round
+        setTimeout(startRound, 140);
+      } else {
+        tile.classList.add('flash-bad');
+        gameOver('wrong');
+      }
+    }
+
+    function gameOver(reason) {
+      cancelAnimationFrame(rafId);
+      state = State.over;
+      const panel = $('panel');
+      panel.style.display = '';
+      $('panel-title').textContent = reason === 'time' ? 'time\u2019s up' : 'wrong square';
+      $('panel-msg').textContent = `final score: ${score}${score === best && score > 0 ? ' — new best!' : ''}`;
+      $('start-btn').textContent = 'Play again';
+      $('reveal').style.display = '';
+      $('reveal').innerHTML = `the odd one was <span class="swatch" style="background:${rgb(oddColor)}"></span><code>rgb(${oddColor.join(', ')})</code> · the rest <span class="swatch" style="background:${rgb(baseColor)}"></span><code>rgb(${baseColor.join(', ')})</code>`;
+    }
+
+    function startGame() {
+      score = 0;
+      $('score').textContent = '0';
+      state = State.playing;
+      $('panel').style.display = 'none';
+      $('reveal').style.display = 'none';
+      startRound();
+    }
+
+    $('start-btn').onclick = startGame;
+    $('reset-best-btn').onclick = () => {
+      if (!confirm('Reset high score?')) return;
+      best = 0;
+      localStorage.setItem(STORAGE_KEY, '0');
+      $('best').textContent = '0';
+    };
+
+    // Show a static placeholder grid before the game starts
+    (function preview() {
+      gridSize = 2; applyDifficulty();
+      board.style.gridTemplateColumns = `repeat(2, 1fr)`;
+      board.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const t = document.createElement('div');
+        t.className = 'tile';
+        t.style.background = '#d6d3d1';
+        t.style.cursor = 'default';
+        board.appendChild(t);
+      }
+    })();
+  </script>
+</body>
+</html>
