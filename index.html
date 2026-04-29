@@ -59,6 +59,17 @@
     .tile:active { transform: scale(0.98); }
     .tile.flash-good { animation: flashGood 350ms ease; }
     .tile.flash-bad  { animation: flashBad 500ms ease; }
+    .tile.reveal-odd {
+      outline: 3px solid #082f49;
+      outline-offset: -3px;
+      animation: revealPulse 600ms ease;
+    }
+
+    @keyframes revealPulse {
+      0% { box-shadow: 0 0 0 0 rgba(8, 47, 73, 0); }
+      40% { box-shadow: 0 0 0 10px rgba(8, 47, 73, 0.35); }
+      100% { box-shadow: 0 0 0 0 rgba(8, 47, 73, 0); }
+    }
 
     @keyframes flashGood {
       0% { box-shadow: 0 0 0 0 rgba(8, 47, 73, 0.0); }
@@ -156,11 +167,19 @@
     $('best').textContent = best;
 
     function difficultyFor(score) {
-      // Smoothly ramp: bigger grid + smaller color diff + tighter clock
-      const grid = Math.min(6, 2 + Math.floor(score / 4));
-      const diff = Math.max(6, Math.round(60 - score * 1.6));   // 60 → 6
-      const time = Math.max(2.0, 5.0 - score * 0.12);           // 5s → 2s
-      const lvl  = Math.floor(score / 4) + 1;
+      // Grid grows slowly: 2× (0-4) → 3× (5-14) → 4× (15-29) → 5× (30-49) → 6× (50-74) → 7× (75+)
+      let grid;
+      if      (score < 5)  grid = 2;
+      else if (score < 15) grid = 3;
+      else if (score < 30) grid = 4;
+      else if (score < 50) grid = 5;
+      else if (score < 75) grid = 6;
+      else                 grid = 7;
+      // Color delta starts mild (35), shrinks slowly to a floor of 4.
+      const diff = Math.max(4, Math.round(35 - score * 0.45));
+      // Time tightens slowly from 5s → 2.5s.
+      const time = Math.max(2.5, 5.0 - score * 0.04);
+      const lvl  = Math.max(1, [0,5,15,30,50,75,9999].findIndex(t => score < t));
       return { grid, diff, time, lvl };
     }
 
@@ -251,6 +270,9 @@
     function gameOver(reason) {
       cancelAnimationFrame(rafId);
       state = State.over;
+      // Reveal the odd tile so the player can see what they missed.
+      const oddTile = board.querySelector(`.tile[data-idx="${oddIdx}"]`);
+      if (oddTile) oddTile.classList.add('reveal-odd');
       const panel = $('panel');
       panel.style.display = '';
       $('panel-title').textContent = reason === 'time' ? 'time\u2019s up' : 'wrong square';
