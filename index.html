@@ -107,6 +107,42 @@
 
     footer.site { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
       font-size: 0.85rem; color: var(--muted); }
+    /* Reserve room for the controls before assigning the square board its size. */
+    .wrap { padding: 1rem 1.25rem; }
+    header.site { padding-bottom: .65rem; margin-bottom: .65rem; }
+    .lede { margin-bottom: .65rem; }
+    .hud { gap: .4rem; margin-bottom: .5rem; }
+    .timer-bar { margin-bottom: .65rem; }
+    .board { width: min(100%, 520px, max(120px, calc(100dvh - 370px))); }
+    .panel { margin: .65rem 0; }
+    .panel h2 { font-size: 1.15rem; margin-bottom: .15rem; }
+    .panel p { margin-bottom: .5rem; font-size: .85rem; }
+    .reveal { font-size: .68rem; }
+    footer.site { margin-top: .65rem; padding-top: .5rem; }
+    button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    @media (max-width: 430px) {
+      html { font-size: 15px; }
+      .wrap { padding: .6rem .85rem; }
+      nav.site a { margin-left: .75rem; }
+      .board { width: min(100%, max(100px, calc(100dvh - 355px))); gap: 4px; }
+    }
+    @media (max-height: 500px) and (min-width: 560px) {
+      .wrap { max-width: 850px; }
+      main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 1.5rem; }
+      h1, .lede, .hud, .timer-bar, .panel { grid-column: 1; }
+      .board { grid-column: 2; grid-row: 1 / span 5; width: min(100%, calc(100dvh - 110px)); align-self: center; }
+      .panel { margin: 0; }
+      footer.site { display: none; }
+    }
+    @media (max-height: 500px) and (min-width: 560px) {
+      .lede { display: none; }
+      header.site { margin-bottom: .4rem; padding-bottom: .4rem; }
+      .stat { padding: .2rem; }
+      .panel h2 { font-size: 1rem; }
+      .panel .reveal { font-size: .6rem; }
+      .panel button { padding: .4rem .8rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
   </style>
 </head>
 <body>
@@ -135,7 +171,7 @@
 
       <div class="board" id="board"></div>
 
-      <div class="panel" id="panel">
+      <div class="panel" id="panel" aria-live="polite">
         <h2 id="panel-title">ready?</h2>
         <p id="panel-msg">click a square fast. each correct pick speeds things up and shrinks the color difference.</p>
         <button class="primary" id="start-btn">Start</button>
@@ -144,7 +180,7 @@
       </div>
     </main>
 
-    <footer class="site"><a href="https://github.com/SamBarbeau/color-game">source</a></footer>
+    <footer class="site"><a href="https://github.com/SamBarbeau/color-game-web">source</a></footer>
   </div>
 
   <script>
@@ -160,7 +196,12 @@
     let colorDiff = 60;     // initial RGB delta on the largest channel
     let timeLimit = 5.0;    // seconds per round
     let timeLeft  = timeLimit;
-    let best = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+    let best = 0;
+    try { best = Math.max(0, parseInt(localStorage.getItem(STORAGE_KEY), 10) || 0); } catch {}
+    const saveBest = () => { try { localStorage.setItem(STORAGE_KEY, String(best)); } catch {} };
+    let bestAtStart = best;
+    let roundPending = false;
+    let roundTimeout;
     let oddIdx = -1;
     let baseColor = null;
     let oddColor = null;
@@ -215,6 +256,7 @@
         tile.className = 'tile';
         tile.style.background = rgb(i === oddIdx ? oddColor : baseColor);
         tile.dataset.idx = i;
+        tile.setAttribute('aria-label', `Row ${Math.floor(i / gridSize) + 1}, column ${i % gridSize + 1}`);
         tile.addEventListener('click', () => onTileClick(i, tile));
         board.appendChild(tile);
       }
@@ -231,6 +273,9 @@
     }
 
     function startRound() {
+      if (state !== State.playing) return;
+      roundPending = false;
+      $('timer-fill').style.width = '100%';
       applyDifficulty();
       paintBoard();
       timeLeft = timeLimit;
@@ -252,18 +297,21 @@
     }
 
     function onTileClick(i, tile) {
-      if (state !== State.playing) return;
+      if (state !== State.playing || roundPending) return;
+      if (performance.now() - lastTick >= timeLeft * 1000) { gameOver('time'); return; }
       if (i === oddIdx) {
+        roundPending = true;
+        cancelAnimationFrame(rafId);
         tile.classList.add('flash-good');
         score++;
         $('score').textContent = score;
         if (score > best) {
           best = score;
-          localStorage.setItem(STORAGE_KEY, String(best));
+          saveBest();
           $('best').textContent = best;
         }
         // Quick 120ms beat then next round
-        setTimeout(startRound, 140);
+        roundTimeout = setTimeout(startRound, 140);
       } else {
         tile.classList.add('flash-bad');
         gameOver('wrong');
@@ -272,6 +320,7 @@
 
     function gameOver(reason) {
       cancelAnimationFrame(rafId);
+      clearTimeout(roundTimeout);
       state = State.over;
       // Reveal the odd tile so the player can see what they missed.
       const oddTile = board.querySelector(`.tile[data-idx="${oddIdx}"]`);
@@ -279,13 +328,15 @@
       const panel = $('panel');
       panel.style.display = '';
       $('panel-title').textContent = reason === 'time' ? 'time\u2019s up' : 'wrong square';
-      $('panel-msg').textContent = `final score: ${score}${score === best && score > 0 ? ' — new best!' : ''}`;
+      $('panel-msg').textContent = `final score: ${score}${score > bestAtStart ? ' — new best!' : ''}`;
       $('start-btn').textContent = 'Play again';
       $('reveal').style.display = '';
       $('reveal').innerHTML = `the odd one was <span class="swatch" style="background:${rgb(oddColor)}"></span><code>rgb(${oddColor.join(', ')})</code> · the rest <span class="swatch" style="background:${rgb(baseColor)}"></span><code>rgb(${baseColor.join(', ')})</code>`;
     }
 
     function startGame() {
+      bestAtStart = best;
+      clearTimeout(roundTimeout);
       score = 0;
       $('score').textContent = '0';
       state = State.playing;
@@ -298,9 +349,19 @@
     $('reset-best-btn').onclick = () => {
       if (!confirm('Reset high score?')) return;
       best = 0;
-      localStorage.setItem(STORAGE_KEY, '0');
+      saveBest();
       $('best').textContent = '0';
     };
+
+    function fitBoard() {
+      if (innerHeight <= 500 && innerWidth >= 560) { board.style.width = ''; return; }
+      const wrap = document.querySelector('.wrap');
+      const occupied = wrap.getBoundingClientRect().height - board.getBoundingClientRect().height;
+      board.style.width = Math.max(90, Math.min(520, board.parentElement.clientWidth, innerHeight - occupied - 3)) + 'px';
+    }
+    window.addEventListener('resize', fitBoard);
+    new ResizeObserver(fitBoard).observe($('panel'));
+    document.fonts.ready.then(fitBoard);
 
     // Show a static placeholder grid before the game starts
     (function preview() {
