@@ -175,7 +175,6 @@
         <h2 id="panel-title">ready?</h2>
         <p id="panel-msg">click a square fast. each correct pick speeds things up and shrinks the color difference.</p>
         <button class="primary" id="start-btn">Start</button>
-        <button class="ghost" id="reset-best-btn" title="Clear high score">reset best</button>
         <div class="reveal" id="reveal" style="display:none"></div>
       </div>
     </main>
@@ -346,12 +345,7 @@
     }
 
     $('start-btn').onclick = startGame;
-    $('reset-best-btn').onclick = () => {
-      if (!confirm('Reset high score?')) return;
-      best = 0;
-      saveBest();
-      $('best').textContent = '0';
-    };
+
 
     function fitBoard() {
       if (innerHeight <= 500 && innerWidth >= 560) { board.style.width = ''; return; }
